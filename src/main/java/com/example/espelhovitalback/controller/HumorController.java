@@ -18,7 +18,10 @@ public class HumorController {
     }
 
     @GetMapping
-    public List<Humor> listar() {
+    public List<Humor> listar(@RequestParam(required = false) Long usuarioId) {
+        if (usuarioId != null) {
+            return repository.findByUsuarioId(usuarioId);
+        }
         return repository.findAll();
     }
 

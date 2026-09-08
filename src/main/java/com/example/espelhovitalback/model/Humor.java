@@ -11,23 +11,52 @@ public class Humor {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String humor;
+    @Column(name = "usuario_id")
+    private Long usuarioId;
 
+    /** Ex: "😊 Feliz, ✨ Animada" (emoções selecionadas, separadas por vírgula) */
+    private String estado;
+
+    @Column(length = 500)
+    private String observacao;
+
+    @Column(name = "data_registro")
     private LocalDate dataRegistro;
 
     public Humor() {
+    }
+
+    @PrePersist
+    public void prePersist() {
+        this.dataRegistro = LocalDate.now();
     }
 
     public Long getId() {
         return id;
     }
 
-    public String getHumor() {
-        return humor;
+    public Long getUsuarioId() {
+        return usuarioId;
     }
 
-    public void setHumor(String humor) {
-        this.humor = humor;
+    public void setUsuarioId(Long usuarioId) {
+        this.usuarioId = usuarioId;
+    }
+
+    public String getEstado() {
+        return estado;
+    }
+
+    public void setEstado(String estado) {
+        this.estado = estado;
+    }
+
+    public String getObservacao() {
+        return observacao;
+    }
+
+    public void setObservacao(String observacao) {
+        this.observacao = observacao;
     }
 
     public LocalDate getDataRegistro() {

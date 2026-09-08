@@ -18,7 +18,10 @@ public class SonoController {
     }
 
     @GetMapping
-    public List<Sono> listar() {
+    public List<Sono> listar(@RequestParam(required = false) Long usuarioId) {
+        if (usuarioId != null) {
+            return repository.findByUsuarioId(usuarioId);
+        }
         return repository.findAll();
     }
 

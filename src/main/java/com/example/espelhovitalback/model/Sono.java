@@ -11,6 +11,9 @@ public class Sono {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "usuario_id")
+    private Long usuarioId;
+
     private Integer horas;
 
     private String qualidade;
@@ -29,6 +32,14 @@ public class Sono {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getUsuarioId() {
+        return usuarioId;
+    }
+
+    public void setUsuarioId(Long usuarioId) {
+        this.usuarioId = usuarioId;
     }
 
     public Integer getHoras() {
