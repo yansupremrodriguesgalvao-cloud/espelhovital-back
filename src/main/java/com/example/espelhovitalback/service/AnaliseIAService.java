@@ -1,140 +1,122 @@
 package com.example.espelhovitalback.service;
 
-import com.example.espelhovitalback.model.CicloMenstrual;
-import com.example.espelhovitalback.model.Humor;
-import com.example.espelhovitalback.model.Sono;
-import com.example.espelhovitalback.repository.CicloMenstrualRepository;
-import com.example.espelhovitalback.repository.HumorRepository;
-import com.example.espelhovitalback.repository.SonoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
-/**
- * Motor de análise de dados que cruza sono, humor e ciclo menstrual para gerar
- * insights automáticos (estatísticas + regras). Serve de base para a tela
- * "Inteligência Artificial para Análise de Dados". Não é um modelo de machine
- * learning treinado — é um motor estatístico/heurístico que processa os
- * registros da usuária e resume padrões relevantes, no mesmo espírito da
- * análise de sono que já existia no projeto.
- */
 @Service
 public class AnaliseIAService {
 
-    @Autowired
-    private SonoRepository sonoRepository;
+    private final RestTemplate restTemplate = new RestTemplate();
 
-    @Autowired
-    private HumorRepository humorRepository;
+    public String responder(String pergunta) {
 
-    @Autowired
-    private CicloMenstrualRepository cicloRepository;
+        String apiKey = System.getenv("XAI_API_KEY");
 
-    public Map<String, Object> analisar() {
+        if (apiKey == null || apiKey.isBlank()) {
+            return "A chave da Assistente Vital não foi configurada.";
+        }
 
-        Map<String, Object> resultado = new LinkedHashMap<>();
-        List<String> insights = new ArrayList<>();
+        String url =
+                "https://api.x.ai/v1/chat/completions";
 
-        List<Sono> sonos = sonoRepository.findAll();
-        List<Humor> humores = humorRepository.findAll();
-        List<CicloMenstrual> ciclos = cicloRepository.findAll();
+        HttpHeaders headers = new HttpHeaders();
 
-        // ---------- Estatísticas de sono ----------
-        double mediaSono = sonos.stream()
-                .filter(s -> s.getHoras() != null)
-                .mapToInt(Sono::getHoras)
-                .average().orElse(0);
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-        resultado.put("mediaHorasSono", arredondar(mediaSono));
-        resultado.put("totalRegistrosSono", sonos.size());
+        headers.setBearerAuth(apiKey);
 
-        if (!sonos.isEmpty()) {
-            long noitesRuins = sonos.stream()
-                    .filter(s -> "Ruim".equalsIgnoreCase(s.getQualidade()))
-                    .count();
+        String mensagemSistema =
+                "Você é a Assistente Vital do Espelho Vital. "
+                        + "Seja acolhedora, delicada, clara e objetiva. "
+                        + "Responda sempre em português do Brasil. "
+                        + "Você pode ajudar com informações gerais sobre "
+                        + "bem-estar, ciclo menstrual, autocuidado, sono "
+                        + "e emoções. "
+                        + "Não faça diagnósticos médicos. "
+                        + "Quando uma situação exigir avaliação profissional, "
+                        + "oriente a usuária a procurar um profissional de saúde.";
 
-            double percentualRuim = (noitesRuins * 100.0) / sonos.size();
-            resultado.put("percentualNoitesRuins", arredondar(percentualRuim));
+        Map<String, Object> mensagemSistemaMap =
+                Map.of(
+                        "role", "system",
+                        "content", mensagemSistema
+                );
 
-            if (percentualRuim >= 40) {
-                insights.add("📊 " + arredondar(percentualRuim) + "% das suas noites registradas foram classificadas como \"Ruim\". Vale investigar rotina antes de dormir, uso de telas e horários irregulares.");
+        Map<String, Object> mensagemUsuario =
+                Map.of(
+                        "role", "user",
+                        "content", pergunta
+                );
+
+        Map<String, Object> corpo =
+                Map.of(
+                        "model", "grok-4.6",
+                        "messages", List.of(
+                                mensagemSistemaMap,
+                                mensagemUsuario
+                        ),
+                        "stream", false
+                );
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(
+                        corpo,
+                        headers
+                );
+
+        try {
+
+            ResponseEntity<Map> response =
+                    restTemplate.postForEntity(
+                            url,
+                            request,
+                            Map.class
+                    );
+
+            Map resposta = response.getBody();
+
+            if (resposta == null) {
+                return "Não consegui receber uma resposta da Assistente Vital.";
             }
 
-            // tendência: compara a média da segunda metade dos registros com a primeira
-            if (sonos.size() >= 4) {
-                int meio = sonos.size() / 2;
-                double mediaPrimeira = sonos.subList(0, meio).stream()
-                        .filter(s -> s.getHoras() != null).mapToInt(Sono::getHoras).average().orElse(0);
-                double mediaSegunda = sonos.subList(meio, sonos.size()).stream()
-                        .filter(s -> s.getHoras() != null).mapToInt(Sono::getHoras).average().orElse(0);
+            List choices =
+                    (List) resposta.get("choices");
 
-                if (mediaSegunda - mediaPrimeira >= 0.8) {
-                    insights.add("📈 Sua média de sono vem melhorando ao longo dos registros mais recentes.");
-                } else if (mediaPrimeira - mediaSegunda >= 0.8) {
-                    insights.add("📉 Sua média de sono caiu nos registros mais recentes em comparação aos anteriores.");
-                }
+            if (choices == null || choices.isEmpty()) {
+                return "A Assistente Vital não retornou uma resposta.";
             }
-        }
 
-        // ---------- Estatísticas de humor ----------
-        Map<String, Long> contagemHumor = new LinkedHashMap<>();
-        for (Humor h : humores) {
-            if (h.getEstado() == null) continue;
-            for (String parte : h.getEstado().split(",")) {
-                String chave = parte.trim();
-                if (chave.isEmpty()) continue;
-                contagemHumor.merge(chave, 1L, Long::sum);
+            Map primeiraChoice =
+                    (Map) choices.get(0);
+
+            Map message =
+                    (Map) primeiraChoice.get("message");
+
+            if (message == null) {
+                return "Não consegui interpretar a resposta da Assistente Vital.";
             }
-        }
-        resultado.put("distribuicaoHumor", contagemHumor);
-        resultado.put("totalRegistrosHumor", humores.size());
 
-        if (!contagemHumor.isEmpty()) {
-            String maisFrequente = Collections.max(contagemHumor.entrySet(), Map.Entry.comparingByValue()).getKey();
-            insights.add("🧠 O estado emocional mais registrado até agora foi \"" + maisFrequente + "\".");
-        }
+            Object content =
+                    message.get("content");
 
-        // ---------- Correlação simples: sono baixo x humor negativo no mesmo dia ----------
-        long diasComSonoBaixoEHumorNegativo = 0;
-        for (Sono s : sonos) {
-            if (s.getHoras() == null || s.getHoras() >= 6 || s.getDataRegistro() == null) continue;
-            boolean humorNegativoMesmoDia = humores.stream().anyMatch(h ->
-                    h.getDataRegistro() != null
-                            && h.getDataRegistro().equals(s.getDataRegistro())
-                            && h.getEstado() != null
-                            && (h.getEstado().toLowerCase().contains("triste")
-                                || h.getEstado().toLowerCase().contains("ansios")
-                                || h.getEstado().toLowerCase().contains("cansad")
-                                || h.getEstado().toLowerCase().contains("irritad")));
-            if (humorNegativoMesmoDia) diasComSonoBaixoEHumorNegativo++;
-        }
-
-        if (diasComSonoBaixoEHumorNegativo >= 2) {
-            insights.add("🔗 Identificamos " + diasComSonoBaixoEHumorNegativo + " dia(s) em que dormir menos de 6h coincidiu com um humor mais negativo. Cuidar do sono pode ajudar seu bem-estar emocional.");
-        }
-
-        // ---------- Ciclo menstrual: regularidade ----------
-        if (!ciclos.isEmpty()) {
-            CicloMenstrual ultimo = ciclos.get(ciclos.size() - 1);
-            if (ultimo.getDuracaoCiclo() != null) {
-                if (ultimo.getDuracaoCiclo() < 21 || ultimo.getDuracaoCiclo() > 35) {
-                    insights.add("🌸 A duração do seu ciclo informada (" + ultimo.getDuracaoCiclo() + " dias) está fora da faixa mais comum (21-35 dias). Considere conversar com um profissional de saúde.");
-                } else {
-                    insights.add("🌸 A duração do seu ciclo (" + ultimo.getDuracaoCiclo() + " dias) está dentro da faixa considerada regular.");
-                }
+            if (content == null) {
+                return "A Assistente Vital não retornou texto.";
             }
+
+            return content.toString();
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+
+            return "Não foi possível conectar com a Assistente Vital.";
         }
-
-        if (insights.isEmpty()) {
-            insights.add("📌 Continue registrando seus dados de sono, humor e ciclo para desbloquear análises mais completas.");
-        }
-
-        resultado.put("insights", insights);
-        return resultado;
-    }
-
-    private double arredondar(double valor) {
-        return Math.round(valor * 10.0) / 10.0;
     }
 }

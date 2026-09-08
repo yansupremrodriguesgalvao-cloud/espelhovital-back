@@ -1,25 +1,25 @@
 package com.example.espelhovitalback.controller;
 
 import com.example.espelhovitalback.service.AnaliseIAService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
-@RequestMapping("/analise-ia")
-@CrossOrigin("*")
+@RequestMapping("/ia")
+@CrossOrigin(origins = "*")
 public class AnaliseIAController {
 
-    @Autowired
-    private AnaliseIAService service;
+    private final AnaliseIAService analiseIAService;
 
-    /** Insights automáticos cruzando sono, humor e ciclo menstrual. */
-    @GetMapping
-    public Map<String, Object> analisar() {
-        return service.analisar();
+    public AnaliseIAController(AnaliseIAService analiseIAService) {
+        this.analiseIAService = analiseIAService;
+    }
+
+    @PostMapping("/perguntar")
+    public String perguntar(@RequestBody String pergunta) {
+        return analiseIAService.responder(pergunta);
     }
 }
