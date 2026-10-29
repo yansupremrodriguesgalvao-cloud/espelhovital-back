@@ -1,85 +1,66 @@
 package com.example.espelhovitalback.controller;
 
-import com.example.espelhovitalback.dto.FaceDescriptorRequest;
-import com.example.espelhovitalback.dto.LoginResponse;
-import com.example.espelhovitalback.dto.PerfilDTO;
-import com.example.espelhovitalback.dto.UsuarioDTO;
-import com.example.espelhovitalback.model.Usuario;
-import com.example.espelhovitalback.service.UsuarioService;
-import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.Optional;
+import com.example.espelhovitalback.dto.*;
+import com.example.espelhovitalback.service.*;
+import com.example.espelhovitalback.config.CurrentUser;
+import jakarta.validation.Valid;
+import jakarta.servlet.http.*;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/usuarios")
-@CrossOrigin("*")
 public class UsuarioController {
-
     private final UsuarioService service;
+    private final CurrentUser current;
+    private final SessionService sessions;
 
-    public UsuarioController(UsuarioService service) {
+    public UsuarioController(UsuarioService service, CurrentUser current, SessionService sessions) {
         this.service = service;
+        this.current = current;
+        this.sessions = sessions;
     }
 
     @PostMapping("/cadastrar")
-    public ResponseEntity<String> cadastrar(@Valid @RequestBody UsuarioDTO dto) {
-        try {
-            service.cadastrar(dto);
-            return ResponseEntity.ok("Usuária cadastrada com sucesso!");
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public Map<String, String> cadastrar(@Valid @RequestBody UsuarioDTO body) {
+        service.cadastrar(body);
+        return Map.of("mensagem", "Usuária cadastrada com sucesso!");
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> buscarPerfil(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(service.buscarPerfil(id));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
-        }
+    public PerfilDTO perfil(@PathVariable Long id) {
+        return service.buscarPerfil(id);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> atualizarPerfil(@PathVariable Long id, @RequestBody PerfilDTO dto) {
-        try {
-            return ResponseEntity.ok(service.atualizarPerfil(id, dto));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
-        }
+    public PerfilDTO atualizar(@PathVariable Long id, @Valid @RequestBody PerfilDTO body) {
+        return service.atualizarPerfil(id, body);
     }
 
-    // ==================== RECONHECIMENTO FACIAL ====================
-
-    /** Cadastra/atualiza o "rosto" (descritor facial) da usuária já logada. */
     @PostMapping("/face/cadastrar")
-    public ResponseEntity<?> cadastrarFace(@RequestBody FaceDescriptorRequest request) {
-        try {
-            service.cadastrarDescritorFacial(request.getUsuarioId(), request.getDescritor());
-            return ResponseEntity.ok("Rosto cadastrado com sucesso!");
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public Map<String, String> face(@Valid @RequestBody FaceDescriptorRequest body) {
+        PerfilDTO profile = service.buscarPerfil(current.id());
+        service.login(profile.getEmail(), body.getSenha()).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Senha inválida."));
+        service.cadastrarDescritorFacial(current.id(), body.getDescritor());
+        return Map.of("mensagem", "Rosto cadastrado com sucesso.");
     }
 
-    /** Login usando apenas o rosto (compara com os descritores cadastrados). */
+    @DeleteMapping("/face")
+    public ResponseEntity<Void> deleteFace() {
+        service.removerFace();
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/face/login")
-    public ResponseEntity<?> loginFacial(@RequestBody FaceDescriptorRequest request) {
-
-        Optional<Usuario> usuarioOpt = service.loginPorReconhecimentoFacial(request.getDescritor());
-
-        if (usuarioOpt.isPresent()) {
-            Usuario usuario = usuarioOpt.get();
-            return ResponseEntity.ok(new LoginResponse(
-                    usuario.getId(),
-                    usuario.getNome(),
-                    usuario.getEmail(),
-                    "Login facial realizado com sucesso!"
-            ));
-        }
-
-        return ResponseEntity.status(401).body("Rosto não reconhecido. Tente novamente ou use e-mail e senha.");
+    public LoginResponse faceLogin(@Valid @RequestBody FaceDescriptorRequest body, HttpServletRequest req, HttpServletResponse res) {
+        if (body.getEmail() == null || body.getEmail().isBlank())
+            throw new IllegalArgumentException("Informe e-mail e senha para confirmar sua identidade.");
+        var user = service.loginPorReconhecimentoFacial(body.getEmail(), body.getSenha(), body.getDescritor())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Não foi possível confirmar a identidade. Use e-mail e senha."));
+        return sessions.login(user, req, res);
     }
 }

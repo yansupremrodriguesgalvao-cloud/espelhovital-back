@@ -4,7 +4,7 @@ import com.example.espelhovitalback.dto.PerfilDTO;
 import com.example.espelhovitalback.dto.UsuarioDTO;
 import com.example.espelhovitalback.model.Usuario;
 import com.example.espelhovitalback.repository.UsuarioRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,22 +15,27 @@ import java.util.stream.Collectors;
 
 @Service
 public class UsuarioService {
+    public UsuarioService(UsuarioRepository repository, PasswordEncoder passwordEncoder, com.example.espelhovitalback.config.CurrentUser current) {
+        this.current = current;
+        this.repository = repository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
-    @Autowired
-    private UsuarioRepository repository;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final com.example.espelhovitalback.config.CurrentUser current;
+    private final UsuarioRepository repository;
+
+    private final PasswordEncoder passwordEncoder;
 
     public void cadastrar(UsuarioDTO dto) {
 
-        if (repository.findByEmail(dto.getEmail()).isPresent()) {
+        if (repository.findByEmailIgnoreCase(dto.getEmail().trim()).isPresent()) {
             throw new IllegalArgumentException("Já existe uma usuária cadastrada com este e-mail.");
         }
 
         Usuario usuario = new Usuario();
         usuario.setNome(dto.getNome());
-        usuario.setEmail(dto.getEmail());
+        usuario.setEmail(dto.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
         usuario.setSenha(passwordEncoder.encode(dto.getSenha()));
 
         repository.save(usuario);
@@ -41,7 +46,7 @@ public class UsuarioService {
      */
     public Optional<Usuario> login(String email, String senha) {
 
-        Optional<Usuario> usuarioOpt = repository.findByEmail(email);
+        Optional<Usuario> usuarioOpt = repository.findByEmailIgnoreCase(email.trim());
 
         if (usuarioOpt.isEmpty()) {
             return Optional.empty();
@@ -57,6 +62,7 @@ public class UsuarioService {
     }
 
     public PerfilDTO buscarPerfil(Long id) {
+        current.requireOwner(id);
 
         Usuario usuario = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Usuária não encontrada."));
@@ -65,12 +71,19 @@ public class UsuarioService {
     }
 
     public PerfilDTO atualizarPerfil(Long id, PerfilDTO dto) {
+        current.requireOwner(id);
 
         Usuario usuario = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Usuária não encontrada."));
 
         if (dto.getNome() != null) usuario.setNome(dto.getNome());
-        if (dto.getEmail() != null) usuario.setEmail(dto.getEmail());
+        if (dto.getEmail() != null) {
+            repository.findByEmailIgnoreCase(dto.getEmail().trim()).filter(u -> !u.getId().equals(id))
+                    .ifPresent(u -> {
+                        throw new IllegalArgumentException("E-mail já cadastrado.");
+                    });
+        }
+        if (dto.getEmail() != null) usuario.setEmail(dto.getEmail().trim().toLowerCase(java.util.Locale.ROOT));
         if (dto.getTelefone() != null) usuario.setTelefone(dto.getTelefone());
         if (dto.getDataNascimento() != null) usuario.setDataNascimento(dto.getDataNascimento());
         if (dto.getCidade() != null) usuario.setCidade(dto.getCidade());
@@ -85,7 +98,9 @@ public class UsuarioService {
 
     // ==================== RECONHECIMENTO FACIAL ====================
 
-    /** Distância euclidiana máxima entre descritores para considerar a mesma pessoa (padrão usado pelo face-api.js). */
+    /**
+     * Distância euclidiana máxima entre descritores para considerar a mesma pessoa (padrão usado pelo face-api.js).
+     */
     private static final double LIMIAR_DISTANCIA = 0.5;
 
     /**
@@ -93,11 +108,12 @@ public class UsuarioService {
      * no navegador) associado à usuária, para uso futuro no login facial.
      */
     public void cadastrarDescritorFacial(Long usuarioId, List<Double> descritor) {
+        current.requireOwner(usuarioId);
 
         Usuario usuario = repository.findById(usuarioId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuária não encontrada."));
 
-        if (descritor == null || descritor.size() != 128) {
+        if (descritor == null || descritor.size() != 128 || descritor.stream().anyMatch(v -> v == null || !Double.isFinite(v))) {
             throw new IllegalArgumentException("Descritor facial inválido.");
         }
 
@@ -110,42 +126,21 @@ public class UsuarioService {
     }
 
     /**
-     * Compara o descritor recebido da câmera com os descritores salvos de
-     * todas as usuárias e retorna a que mais se parece, se estiver dentro do
-     * limiar de similaridade.
+     * Compara o descritor apenas com a conta confirmada por e-mail e senha.
+     * O vetor recebido do navegador não comprova uma captura ao vivo.
      */
-    public Optional<Usuario> loginPorReconhecimentoFacial(List<Double> descritorRecebido) {
-
-        if (descritorRecebido == null || descritorRecebido.size() != 128) {
+    public Optional<Usuario> loginPorReconhecimentoFacial(String email, String senha, List<Double> descritor) {
+        if (descritor == null || descritor.size() != 128 || descritor.stream().anyMatch(v -> v == null || !Double.isFinite(v)))
             return Optional.empty();
-        }
-
-        Usuario melhorCandidata = null;
-        double menorDistancia = Double.MAX_VALUE;
-
-        for (Usuario usuario : repository.findAll()) {
-
-            if (usuario.getFaceDescriptor() == null || usuario.getFaceDescriptor().isBlank()) {
-                continue;
+        return login(email, senha).filter(user -> {
+            if (user.getFaceDescriptor() == null || user.getFaceDescriptor().isBlank()) return false;
+            try {
+                List<Double> saved = Arrays.stream(user.getFaceDescriptor().split(",")).map(Double::parseDouble).toList();
+                return saved.size() == 128 && distanciaEuclidiana(descritor, saved) <= LIMIAR_DISTANCIA;
+            } catch (NumberFormatException ex) {
+                return false;
             }
-
-            List<Double> salvo = Arrays.stream(usuario.getFaceDescriptor().split(","))
-                    .map(Double::parseDouble)
-                    .collect(Collectors.toList());
-
-            double distancia = distanciaEuclidiana(descritorRecebido, salvo);
-
-            if (distancia < menorDistancia) {
-                menorDistancia = distancia;
-                melhorCandidata = usuario;
-            }
-        }
-
-        if (melhorCandidata != null && menorDistancia <= LIMIAR_DISTANCIA) {
-            return Optional.of(melhorCandidata);
-        }
-
-        return Optional.empty();
+        });
     }
 
     private double distanciaEuclidiana(List<Double> a, List<Double> b) {
@@ -155,6 +150,12 @@ public class UsuarioService {
             soma += diferenca * diferenca;
         }
         return Math.sqrt(soma);
+    }
+
+    public void removerFace() {
+        Usuario user = repository.findById(current.id()).orElseThrow();
+        user.setFaceDescriptor(null);
+        repository.save(user);
     }
 
     private PerfilDTO toPerfilDTO(Usuario usuario) {

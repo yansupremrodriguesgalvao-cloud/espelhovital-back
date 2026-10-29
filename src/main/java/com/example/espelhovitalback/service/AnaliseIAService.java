@@ -6,8 +6,9 @@ import com.example.espelhovitalback.model.Sono;
 import com.example.espelhovitalback.repository.CicloMenstrualRepository;
 import com.example.espelhovitalback.repository.HumorRepository;
 import com.example.espelhovitalback.repository.SonoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.stereotype.Service;
+import com.example.espelhovitalback.config.CurrentUser;
 
 import java.util.*;
 
@@ -21,29 +22,35 @@ import java.util.*;
  */
 @Service
 public class AnaliseIAService {
+    public AnaliseIAService(CurrentUser current, SonoRepository sonoRepository, HumorRepository humorRepository, CicloMenstrualRepository cicloRepository) {
+        this.current = current;
+        this.sonoRepository = sonoRepository;
+        this.humorRepository = humorRepository;
+        this.cicloRepository = cicloRepository;
+    }
 
-    @Autowired
-    private SonoRepository sonoRepository;
 
-    @Autowired
-    private HumorRepository humorRepository;
+    private final CurrentUser current;
 
-    @Autowired
-    private CicloMenstrualRepository cicloRepository;
+    private final SonoRepository sonoRepository;
+
+    private final HumorRepository humorRepository;
+
+    private final CicloMenstrualRepository cicloRepository;
 
     public Map<String, Object> analisar() {
 
         Map<String, Object> resultado = new LinkedHashMap<>();
         List<String> insights = new ArrayList<>();
 
-        List<Sono> sonos = sonoRepository.findAll();
-        List<Humor> humores = humorRepository.findAll();
-        List<CicloMenstrual> ciclos = cicloRepository.findAll();
+        List<Sono> sonos = sonoRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
+        List<Humor> humores = humorRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
+        List<CicloMenstrual> ciclos = cicloRepository.findByUsuarioIdOrderByDataUltimaMenstruacaoAscIdAsc(current.id());
 
         // ---------- Estatísticas de sono ----------
         double mediaSono = sonos.stream()
                 .filter(s -> s.getHoras() != null)
-                .mapToInt(Sono::getHoras)
+                .mapToDouble(Sono::getHoras)
                 .average().orElse(0);
 
         resultado.put("mediaHorasSono", arredondar(mediaSono));
@@ -65,9 +72,9 @@ public class AnaliseIAService {
             if (sonos.size() >= 4) {
                 int meio = sonos.size() / 2;
                 double mediaPrimeira = sonos.subList(0, meio).stream()
-                        .filter(s -> s.getHoras() != null).mapToInt(Sono::getHoras).average().orElse(0);
+                        .filter(s -> s.getHoras() != null).mapToDouble(Sono::getHoras).average().orElse(0);
                 double mediaSegunda = sonos.subList(meio, sonos.size()).stream()
-                        .filter(s -> s.getHoras() != null).mapToInt(Sono::getHoras).average().orElse(0);
+                        .filter(s -> s.getHoras() != null).mapToDouble(Sono::getHoras).average().orElse(0);
 
                 if (mediaSegunda - mediaPrimeira >= 0.8) {
                     insights.add("📈 Sua média de sono vem melhorando ao longo dos registros mais recentes.");
@@ -96,19 +103,16 @@ public class AnaliseIAService {
         }
 
         // ---------- Correlação simples: sono baixo x humor negativo no mesmo dia ----------
-        long diasComSonoBaixoEHumorNegativo = 0;
-        for (Sono s : sonos) {
-            if (s.getHoras() == null || s.getHoras() >= 6 || s.getDataRegistro() == null) continue;
-            boolean humorNegativoMesmoDia = humores.stream().anyMatch(h ->
-                    h.getDataRegistro() != null
-                            && h.getDataRegistro().equals(s.getDataRegistro())
-                            && h.getEstado() != null
-                            && (h.getEstado().toLowerCase().contains("triste")
-                                || h.getEstado().toLowerCase().contains("ansios")
-                                || h.getEstado().toLowerCase().contains("cansad")
-                                || h.getEstado().toLowerCase().contains("irritad")));
-            if (humorNegativoMesmoDia) diasComSonoBaixoEHumorNegativo++;
+        Set<java.time.LocalDate> diasHumorNegativo = new HashSet<>();
+        for (Humor h : humores) {
+            if (h.getDataRegistro() == null || h.getEstado() == null) continue;
+            String estado = h.getEstado().toLowerCase(Locale.ROOT);
+            if (estado.contains("triste") || estado.contains("ansios") || estado.contains("cansad") || estado.contains("irritad"))
+                diasHumorNegativo.add(h.getDataRegistro());
         }
+        long diasComSonoBaixoEHumorNegativo = sonos.stream()
+                .filter(s -> s.getHoras() != null && s.getHoras() < 6 && diasHumorNegativo.contains(s.getDataRegistro()))
+                .map(Sono::getDataRegistro).distinct().count();
 
         if (diasComSonoBaixoEHumorNegativo >= 2) {
             insights.add("🔗 Identificamos " + diasComSonoBaixoEHumorNegativo + " dia(s) em que dormir menos de 6h coincidiu com um humor mais negativo. Cuidar do sono pode ajudar seu bem-estar emocional.");
@@ -121,7 +125,7 @@ public class AnaliseIAService {
                 if (ultimo.getDuracaoCiclo() < 21 || ultimo.getDuracaoCiclo() > 35) {
                     insights.add("🌸 A duração do seu ciclo informada (" + ultimo.getDuracaoCiclo() + " dias) está fora da faixa mais comum (21-35 dias). Considere conversar com um profissional de saúde.");
                 } else {
-                    insights.add("🌸 A duração do seu ciclo (" + ultimo.getDuracaoCiclo() + " dias) está dentro da faixa considerada regular.");
+                    insights.add("🌸 A duração do seu ciclo (" + ultimo.getDuracaoCiclo() + " dias) está na faixa informada; esse dado isolado não determina regularidade.");
                 }
             }
         }

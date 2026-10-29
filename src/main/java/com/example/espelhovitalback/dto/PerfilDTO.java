@@ -1,5 +1,7 @@
 package com.example.espelhovitalback.dto;
 
+import jakarta.validation.constraints.*;
+
 import java.time.LocalDate;
 
 /**
@@ -9,21 +11,32 @@ import java.time.LocalDate;
 public class PerfilDTO {
 
     private Long id;
+    @Size(min = 3, max = 150)
     private String nome;
+    @Email
+    @Size(max = 254)
     private String email;
+    @Size(max = 30)
     private String telefone;
+    @Past
     private LocalDate dataNascimento;
+    @Size(max = 150)
     private String cidade;
+    @Positive
+    @Max(700)
     private Double peso;
+    @Positive
+    @Max(300)
     private Double altura;
+    @Size(max = 255)
     private String objetivo;
 
     public PerfilDTO() {
     }
 
     public PerfilDTO(Long id, String nome, String email, String telefone,
-                      LocalDate dataNascimento, String cidade,
-                      Double peso, Double altura, String objetivo) {
+                     LocalDate dataNascimento, String cidade,
+                     Double peso, Double altura, String objetivo) {
         this.id = id;
         this.nome = nome;
         this.email = email;

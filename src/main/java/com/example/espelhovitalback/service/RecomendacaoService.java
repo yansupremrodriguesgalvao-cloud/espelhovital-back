@@ -6,8 +6,9 @@ import com.example.espelhovitalback.model.Sono;
 import com.example.espelhovitalback.repository.CicloMenstrualRepository;
 import com.example.espelhovitalback.repository.HumorRepository;
 import com.example.espelhovitalback.repository.SonoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.stereotype.Service;
+import com.example.espelhovitalback.config.CurrentUser;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -20,15 +21,21 @@ import java.util.List;
  */
 @Service
 public class RecomendacaoService {
+    public RecomendacaoService(CurrentUser current, CicloMenstrualRepository cicloRepository, SonoRepository sonoRepository, HumorRepository humorRepository) {
+        this.current = current;
+        this.cicloRepository = cicloRepository;
+        this.sonoRepository = sonoRepository;
+        this.humorRepository = humorRepository;
+    }
 
-    @Autowired
-    private CicloMenstrualRepository cicloRepository;
 
-    @Autowired
-    private SonoRepository sonoRepository;
+    private final CurrentUser current;
 
-    @Autowired
-    private HumorRepository humorRepository;
+    private final CicloMenstrualRepository cicloRepository;
+
+    private final SonoRepository sonoRepository;
+
+    private final HumorRepository humorRepository;
 
     public List<String> gerarRecomendacoes() {
 
@@ -36,14 +43,14 @@ public class RecomendacaoService {
         LocalDate hoje = LocalDate.now();
 
         // ---------- Baseadas no ciclo menstrual ----------
-        List<CicloMenstrual> ciclos = cicloRepository.findAll();
+        List<CicloMenstrual> ciclos = cicloRepository.findByUsuarioIdOrderByDataUltimaMenstruacaoAscIdAsc(current.id());
         if (!ciclos.isEmpty()) {
             CicloMenstrual ultimo = ciclos.get(ciclos.size() - 1);
 
             boolean emMenstruacao = ultimo.getDataUltimaMenstruacao() != null
                     && !hoje.isBefore(ultimo.getDataUltimaMenstruacao())
                     && hoje.isBefore(ultimo.getDataUltimaMenstruacao()
-                            .plusDays(ultimo.getDuracaoMenstruacao() != null ? ultimo.getDuracaoMenstruacao() : 5));
+                    .plusDays(ultimo.getDuracaoMenstruacao() != null ? ultimo.getDuracaoMenstruacao() : 5));
 
             boolean emPeriodoFertil = ultimo.getInicioPeriodoFertil() != null && ultimo.getFimPeriodoFertil() != null
                     && !hoje.isBefore(ultimo.getInicioPeriodoFertil())
@@ -65,11 +72,11 @@ public class RecomendacaoService {
         }
 
         // ---------- Baseadas no sono ----------
-        List<Sono> registrosSono = sonoRepository.findAll();
+        List<Sono> registrosSono = sonoRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
         if (!registrosSono.isEmpty()) {
             double media = registrosSono.stream()
                     .filter(s -> s.getHoras() != null)
-                    .mapToInt(Sono::getHoras)
+                    .mapToDouble(Sono::getHoras)
                     .average()
                     .orElse(0);
 
@@ -83,7 +90,7 @@ public class RecomendacaoService {
         }
 
         // ---------- Baseadas no humor ----------
-        List<Humor> registrosHumor = humorRepository.findAll();
+        List<Humor> registrosHumor = humorRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
         if (!registrosHumor.isEmpty()) {
             Humor ultimo = registrosHumor.get(registrosHumor.size() - 1);
             String estado = ultimo.getEstado() != null ? ultimo.getEstado().toLowerCase() : "";

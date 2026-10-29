@@ -1,6 +1,7 @@
 package com.example.espelhovitalback.model;
 
 import jakarta.persistence.*;
+
 import java.time.LocalDate;
 
 @Entity
@@ -11,11 +12,23 @@ public class Usuario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
+    private Integer authVersion = 0;
+
+    public Integer getAuthVersion() {
+        return authVersion;
+    }
+
+    public void setAuthVersion(Integer value) {
+        authVersion = value;
+    }
+
     private String nome;
 
     @Column(unique = true)
     private String email;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String senha;
 
     private String telefone;
@@ -36,6 +49,7 @@ public class Usuario {
      * reconhecimento facial.
      */
     @Column(name = "face_descriptor", columnDefinition = "TEXT")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String faceDescriptor;
 
     public Usuario() {

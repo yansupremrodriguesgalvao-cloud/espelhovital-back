@@ -1,40 +1,57 @@
 package com.example.espelhovitalback.controller;
 
-import com.example.espelhovitalback.dto.CicloRequest;
-import com.example.espelhovitalback.dto.CicloResponse;
+
+import com.example.espelhovitalback.dto.*;
 import com.example.espelhovitalback.model.CicloMenstrual;
-import com.example.espelhovitalback.repository.CicloMenstrualRepository;
 import com.example.espelhovitalback.service.CicloMenstrualService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/ciclo")
-@CrossOrigin("*")
 public class CicloMenstrualController {
+    private final CicloMenstrualService service;
 
-    @Autowired
-    private CicloMenstrualService service;
-
-    @Autowired
-    private CicloMenstrualRepository repository;
-
-    @PostMapping("/calcular")
-    public CicloResponse calcular(
-            @RequestBody CicloRequest request){
-
-        return service.calcularCiclo(request);
-
+    public CicloMenstrualController(CicloMenstrualService service) {
+        this.service = service;
     }
 
-    /** Consulta o histórico de ciclos já calculados/salvos. */
     @GetMapping
-    public List<CicloMenstrual> listar(@RequestParam(required = false) Long usuarioId) {
-        if (usuarioId != null) {
-            return repository.findByUsuarioId(usuarioId);
-        }
-        return repository.findAll();
+    public List<CicloMenstrual> listar() {
+        return service.listar();
+    }
+
+    @GetMapping("/calendario")
+    public CalendarioResponse calendario() {
+        return service.calendario();
+    }
+
+    @PostMapping("/calcular")
+    public CicloResponse calcular(@Valid @RequestBody CicloRequest request) {
+        return service.calcularCiclo(request);
+    }
+
+    @PostMapping("/inicio")
+    public CicloInicioResponse registrarInicio(@Valid @RequestBody CicloInicioRequest request) {
+        return service.registrarInicio(request.data());
+    }
+
+    @PostMapping("/{id}/fim")
+    public CalendarioResponse registrarFim(@PathVariable Long id, @Valid @RequestBody CicloFimRequest request) {
+        return service.registrarFim(id, request.data());
+    }
+
+    @PutMapping("/{id}")
+    public CicloMenstrual atualizar(@PathVariable Long id, @Valid @RequestBody CicloRequest request) {
+        return service.atualizar(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        service.excluir(id);
+        return ResponseEntity.noContent().build();
     }
 }

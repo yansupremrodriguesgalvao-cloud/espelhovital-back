@@ -1,12 +1,19 @@
 package com.example.espelhovitalback.repository;
 
+
 import com.example.espelhovitalback.model.CicloMenstrual;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.util.*;
 
-@Repository
 public interface CicloMenstrualRepository extends JpaRepository<CicloMenstrual, Long> {
-    List<CicloMenstrual> findByUsuarioId(Long usuarioId);
+    long countByUsuarioId(Long usuarioId);
+
+    List<CicloMenstrual> findByUsuarioIdAndDataUltimaMenstruacaoBetweenOrderByDataUltimaMenstruacaoAscIdAsc(Long usuarioId, java.time.LocalDate start, java.time.LocalDate end);
+
+    void deleteByUsuarioId(Long usuarioId);
+
+    List<CicloMenstrual> findByUsuarioIdOrderByDataUltimaMenstruacaoAscIdAsc(Long usuarioId);
+
+    Optional<CicloMenstrual> findByIdAndUsuarioId(Long id, Long usuarioId);
 }

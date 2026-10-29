@@ -16,7 +16,7 @@ public class ConsultaResumoDTO {
     }
 
     public ConsultaResumoDTO(Long id, String tipo, String titulo, LocalDate dataAgendada,
-                              LocalTime horaAgendada, Long diasRestantes) {
+                             LocalTime horaAgendada, Long diasRestantes) {
         this.id = id;
         this.tipo = tipo;
         this.titulo = titulo;

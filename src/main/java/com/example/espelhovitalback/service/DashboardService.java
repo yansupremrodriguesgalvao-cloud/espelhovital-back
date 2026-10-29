@@ -9,8 +9,9 @@ import com.example.espelhovitalback.model.Sono;
 import com.example.espelhovitalback.repository.CicloMenstrualRepository;
 import com.example.espelhovitalback.repository.HumorRepository;
 import com.example.espelhovitalback.repository.SonoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.stereotype.Service;
+import com.example.espelhovitalback.config.CurrentUser;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -19,58 +20,72 @@ import java.util.List;
 
 @Service
 public class DashboardService {
+    public DashboardService(CurrentUser current, CicloMenstrualRepository cicloRepository, SonoRepository sonoRepository, HumorRepository humorRepository, ConsultaService consultaService, CycleProjection projection) {
+        this.projection = projection;
+        this.current = current;
+        this.cicloRepository = cicloRepository;
+        this.sonoRepository = sonoRepository;
+        this.humorRepository = humorRepository;
+        this.consultaService = consultaService;
+    }
 
-    @Autowired
-    private CicloMenstrualRepository cicloRepository;
 
-    @Autowired
-    private SonoRepository sonoRepository;
+    private final CurrentUser current;
+    private final CycleProjection projection;
 
-    @Autowired
-    private HumorRepository humorRepository;
+    private final CicloMenstrualRepository cicloRepository;
 
-    @Autowired
-    private ConsultaService consultaService;
+    private final SonoRepository sonoRepository;
+
+    private final HumorRepository humorRepository;
+
+    private final ConsultaService consultaService;
 
     public DashboardDTO montar(Long usuarioId) {
 
+        if (usuarioId != null) current.requireOwner(usuarioId);
         DashboardDTO dto = new DashboardDTO();
         LocalDate hoje = LocalDate.now();
         List<String> alertas = new ArrayList<>();
 
         // ---------- Ciclo menstrual ----------
-        List<CicloMenstrual> ciclos = usuarioId != null
-                ? cicloRepository.findByUsuarioId(usuarioId)
-                : cicloRepository.findAll();
+        List<CicloMenstrual> ciclos = cicloRepository.findByUsuarioIdOrderByDataUltimaMenstruacaoAscIdAsc(current.id());
         if (!ciclos.isEmpty()) {
             CicloMenstrual ultimo = ciclos.get(ciclos.size() - 1);
 
-            dto.setProximaMenstruacao(ultimo.getProximaMenstruacao());
-            dto.setOvulacao(ultimo.getOvulacao());
-            dto.setInicioPeriodoFertil(ultimo.getInicioPeriodoFertil());
-            dto.setFimPeriodoFertil(ultimo.getFimPeriodoFertil());
+            var calendario = projection.project(ciclos, hoje);
+            calendario.previsoes().stream().filter(p -> !p.inicioMaisTarde().isBefore(hoje)).findFirst().ifPresent(p -> {
+                dto.setProximaMenstruacao(p.inicio());
+                dto.setOvulacao(p.ovulacao());
+                dto.setInicioPeriodoFertil(p.inicioPeriodoFertil());
+                dto.setFimPeriodoFertil(p.fimPeriodoFertil());
+                if (calendario.irregular()) {
+                    dto.setProximaMenstruacaoMinima(p.inicioMaisCedo());
+                    dto.setProximaMenstruacaoMaxima(p.inicioMaisTarde());
+                }
+            });
 
-            if (ultimo.getProximaMenstruacao() != null) {
-                long dias = ChronoUnit.DAYS.between(hoje, ultimo.getProximaMenstruacao());
+            if (dto.getProximaMenstruacao() != null) {
+                long dias = ChronoUnit.DAYS.between(hoje, dto.getProximaMenstruacao());
                 dto.setDiasParaProximaMenstruacao((int) dias);
 
-                if (dias <= 2 && dias >= 0) {
-                    alertas.add("🌸 Sua menstruação deve começar em " + dias + " dia(s).");
+                if (dias <= 2 && dias >= 0 && !calendario.irregular()) {
+                    alertas.add("🌸 Sua menstruação está estimada para daqui a " + dias + " dia(s).");
                 }
             }
 
             dto.setFaseCicloAtual(calcularFase(hoje, ultimo));
+            if (calendario.irregular() && !"Menstruação registrada".equals(dto.getFaseCicloAtual()))
+                dto.setFaseCicloAtual("Ciclo irregular — consulte o calendário");
         }
 
         // ---------- Sono ----------
-        List<Sono> registrosSono = usuarioId != null
-                ? sonoRepository.findByUsuarioId(usuarioId)
-                : sonoRepository.findAll();
+        List<Sono> registrosSono = sonoRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
         dto.setTotalRegistrosSono(registrosSono.size());
         if (!registrosSono.isEmpty()) {
             double media = registrosSono.stream()
                     .filter(s -> s.getHoras() != null)
-                    .mapToInt(Sono::getHoras)
+                    .mapToDouble(Sono::getHoras)
                     .average()
                     .orElse(0);
             dto.setMediaHorasSono(Math.round(media * 10.0) / 10.0);
@@ -82,9 +97,7 @@ public class DashboardService {
         }
 
         // ---------- Humor ----------
-        List<Humor> registrosHumor = usuarioId != null
-                ? humorRepository.findByUsuarioId(usuarioId)
-                : humorRepository.findAll();
+        List<Humor> registrosHumor = humorRepository.findByUsuarioIdOrderByDataRegistroAscIdAsc(current.id());
         if (!registrosHumor.isEmpty()) {
             Humor ultimo = registrosHumor.get(registrosHumor.size() - 1);
             dto.setUltimoHumor(ultimo.getEstado());
@@ -118,28 +131,17 @@ public class DashboardService {
 
     private String calcularFase(LocalDate hoje, CicloMenstrual ciclo) {
 
-        if (ciclo.getDataUltimaMenstruacao() == null) return "Indefinida";
-
-        LocalDate fimMenstruacao = ciclo.getDataUltimaMenstruacao()
-                .plusDays(ciclo.getDuracaoMenstruacao() != null ? ciclo.getDuracaoMenstruacao() : 5);
-
-        if (!hoje.isBefore(ciclo.getDataUltimaMenstruacao()) && hoje.isBefore(fimMenstruacao)) {
-            return "🩸 Fase Menstrual";
-        }
-
-        if (ciclo.getInicioPeriodoFertil() != null && ciclo.getFimPeriodoFertil() != null
-                && !hoje.isBefore(ciclo.getInicioPeriodoFertil()) && !hoje.isAfter(ciclo.getFimPeriodoFertil())) {
-            return "🌱 Período Fértil";
-        }
-
-        if (ciclo.getOvulacao() != null && hoje.isEqual(ciclo.getOvulacao())) {
-            return "🥚 Ovulação";
-        }
-
-        if (ciclo.getProximaMenstruacao() != null && hoje.isBefore(ciclo.getProximaMenstruacao())) {
-            return "🌙 Fase Lútea";
-        }
-
-        return "🌸 Fase Folicular";
+        if (ciclo.getDataUltimaMenstruacao() == null || hoje.isBefore(ciclo.getDataUltimaMenstruacao()))
+            return "Sem dados para esta data";
+        LocalDate fim = ciclo.getDataUltimaMenstruacao().plusDays(ciclo.getDuracaoMenstruacao() == null ? 5 : ciclo.getDuracaoMenstruacao());
+        if (hoje.isBefore(fim)) return "Menstruação registrada";
+        if (Boolean.TRUE.equals(ciclo.getIrregular())) return "Ciclo irregular — consulte o calendário";
+        if (ciclo.getProximaMenstruacao() == null || !hoje.isBefore(ciclo.getProximaMenstruacao()))
+            return "Atualize o início da menstruação";
+        if (ciclo.getOvulacao() != null && hoje.equals(ciclo.getOvulacao())) return "Ovulação estimada";
+        if (ciclo.getInicioPeriodoFertil() != null && ciclo.getFimPeriodoFertil() != null && !hoje.isBefore(ciclo.getInicioPeriodoFertil()) && !hoje.isAfter(ciclo.getFimPeriodoFertil()))
+            return "Período fértil estimado";
+        if (ciclo.getOvulacao() != null && hoje.isAfter(ciclo.getOvulacao())) return "Fase lútea estimada";
+        return "Fase folicular estimada";
     }
 }

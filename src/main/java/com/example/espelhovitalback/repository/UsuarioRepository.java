@@ -7,5 +7,9 @@ import java.util.Optional;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
-    Optional<Usuario> findByEmail(String email);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from Usuario u where u.id = :id")
+    Optional<Usuario> lockById(@org.springframework.data.repository.query.Param("id") Long id);
+
+    Optional<Usuario> findByEmailIgnoreCase(String email);
 }

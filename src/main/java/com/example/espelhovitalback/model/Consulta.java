@@ -1,5 +1,7 @@
 package com.example.espelhovitalback.model;
 
+import jakarta.validation.constraints.*;
+
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -11,39 +13,61 @@ public class Consulta {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
     private Long id;
 
-    /** CONSULTA ou EXAME */
+    /**
+     * CONSULTA ou EXAME
+     */
     @Column(nullable = false)
+    @NotBlank
+    @Pattern(regexp = "CONSULTA|EXAME")
     private String tipo;
 
-    /** Ex: "Consulta com ginecologista", "Exame de sangue" */
+    /**
+     * Ex: "Consulta com ginecologista", "Exame de sangue"
+     */
     @Column(nullable = false)
+    @NotBlank
+    @Size(max = 200)
     private String titulo;
 
+    @Size(max = 255)
     private String local;
 
     @Column(name = "profissional")
+    @Size(max = 255)
     private String profissional;
 
     @Column(name = "data_agendada", nullable = false)
+    @NotNull
     private LocalDate dataAgendada;
 
     @Column(name = "hora_agendada")
     private LocalTime horaAgendada;
 
     @Column(length = 500)
+    @Size(max = 500)
     private String observacao;
 
-    /** AGENDADA, REALIZADA ou CANCELADA */
+    /**
+     * AGENDADA, REALIZADA ou CANCELADA
+     */
     @Column(nullable = false)
+    @Pattern(regexp = "AGENDADA|REALIZADA|CANCELADA")
     private String status;
 
-    /** Quantos dias antes o lembrete deve avisar (padrão 1 dia) */
+    /**
+     * Quantos dias antes o lembrete deve avisar (padrão 1 dia)
+     */
     @Column(name = "lembrete_dias_antes")
+    @Min(0)
+    @Max(365)
     private Integer lembreteDiasAntes;
 
-    /** Vincula o compromisso ao usuário dono (opcional, mantém compatibilidade se nulo) */
+    /**
+     * Vincula o compromisso ao usuário dono (opcional, mantém compatibilidade se nulo)
+     */
     @Column(name = "usuario_id")
     private Long usuarioId;
 

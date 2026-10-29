@@ -1,36 +1,27 @@
 package com.example.espelhovitalback.controller;
 
+
 import com.example.espelhovitalback.service.GrokService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/grok")
-@CrossOrigin("*")
 public class GrokController {
+    public record Message(@NotBlank @Size(max = 4000) String mensagem) {
+    }
 
-    private final GrokService grokService;
+    private final GrokService service;
 
-    public GrokController(GrokService grokService) {
-        this.grokService = grokService;
+    public GrokController(GrokService service) {
+        this.service = service;
     }
 
     @PostMapping
-    public Map<String, String> conversar(@RequestBody Map<String, String> request) {
-
-        String mensagem = request.get("mensagem");
-
-        if (mensagem == null || mensagem.isBlank()) {
-            return Map.of(
-                    "erro", "A mensagem não pode estar vazia."
-            );
-        }
-
-        String resposta = grokService.conversar(mensagem);
-
-        return Map.of(
-                "resposta", resposta
-        );
+    public Map<String, String> conversar(@Valid @RequestBody Message body) {
+        return Map.of("resposta", service.conversar(body.mensagem()));
     }
 }

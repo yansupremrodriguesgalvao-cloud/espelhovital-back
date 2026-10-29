@@ -11,6 +11,25 @@ public class DashboardDTO {
 
     // Ciclo menstrual
     private LocalDate proximaMenstruacao;
+    private LocalDate proximaMenstruacaoMinima;
+    private LocalDate proximaMenstruacaoMaxima;
+
+    public LocalDate getProximaMenstruacaoMinima() {
+        return proximaMenstruacaoMinima;
+    }
+
+    public void setProximaMenstruacaoMinima(LocalDate value) {
+        proximaMenstruacaoMinima = value;
+    }
+
+    public LocalDate getProximaMenstruacaoMaxima() {
+        return proximaMenstruacaoMaxima;
+    }
+
+    public void setProximaMenstruacaoMaxima(LocalDate value) {
+        proximaMenstruacaoMaxima = value;
+    }
+
     private LocalDate ovulacao;
     private LocalDate inicioPeriodoFertil;
     private LocalDate fimPeriodoFertil;

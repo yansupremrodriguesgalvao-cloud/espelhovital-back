@@ -25,9 +25,14 @@ public class CicloMenstrual {
 
     private LocalDate dataUltimaMenstruacao;
 
+    private Boolean irregular;
+    private Integer duracaoMinima;
+    private Integer duracaoMaxima;
     private Integer duracaoCiclo;
 
     private Integer duracaoMenstruacao;
+
+    private LocalDate fimMenstruacao;
 
     private LocalDate proximaMenstruacao;
 

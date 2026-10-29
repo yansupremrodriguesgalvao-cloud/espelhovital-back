@@ -1,70 +1,57 @@
 package com.example.espelhovitalback.service;
 
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.*;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
-import java.util.Map;
+import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.List;
 
 @Service
 public class GrokService {
-
-    private final RestClient restClient;
-    private final boolean apiKeyConfigurada;
-
-    public GrokService(@Value("${xai.api.key:}") String apiKey) {
-
-        this.apiKeyConfigurada = apiKey != null
-                && !apiKey.isBlank()
-                && !apiKey.equals("COLOQUE_SUA_CHAVE_AQUI");
-
-        if (!apiKeyConfigurada) {
-            System.out.println(
-                    "[GrokService] Aviso: a propriedade xai.api.key não foi configurada em " +
-                    "application.properties. O assistente de IA ficará indisponível até que ela seja definida."
-            );
-        }
-
-        this.restClient = RestClient.builder()
-                .baseUrl("https://api.x.ai/v1")
-                .defaultHeader("Authorization", "Bearer " + (apiKeyConfigurada ? apiKey : ""))
-                .defaultHeader("Content-Type", "application/json")
-                .build();
+    public record Message(String role, String content) {
     }
 
-    public String conversar(String mensagem) {
+    public record Request(String model, List<Message> messages, int max_tokens) {
+    }
 
-        if (!apiKeyConfigurada) {
-            throw new IllegalStateException(
-                    "A propriedade xai.api.key não foi configurada em application.properties. " +
-                    "Preencha o valor de xai.api.key para usar o assistente de IA."
-            );
+    public record Choice(Message message) {
+    }
+
+    public record Response(List<Choice> choices) {
+    }
+
+    private final RestClient client;
+    private final String model;
+    private final boolean configured;
+
+    public GrokService(@Value("${xai.api.key:}") String key, @Value("${xai.api.url:https://api.groq.com/openai/v1}") String url,
+                       @Value("${xai.api.model:llama-3.1-8b-instant}") String model) {
+        this.model = model;
+        this.configured = !key.isBlank() && !key.equals("COLOQUE_SUA_CHAVE_AQUI");
+        var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        client = RestClient.builder().baseUrl(url).requestFactory(factory).defaultHeader("Authorization", "Bearer " + key)
+                .defaultHeader("Content-Type", "application/json").build();
+    }
+
+    public String conversar(String message) {
+        if (!configured)
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Assistente indisponÃ­vel no momento.");
+        try {
+            Response response = client.post().uri("/chat/completions")
+                    .body(new Request(model, List.of(new Message("user", message)), 800)).retrieve().body(Response.class);
+            if (response == null || response.choices() == null || response.choices().isEmpty() || response.choices().get(0).message() == null
+                    || response.choices().get(0).message().content() == null)
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "O assistente nÃ£o retornou uma resposta.");
+            return response.choices().get(0).message().content();
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "O assistente estÃ¡ temporariamente indisponÃ­vel. Tente novamente.");
         }
-
-        Map<String, Object> body = Map.of(
-                "model", "grok-4.5",
-                "messages", new Object[]{
-                        Map.of(
-                                "role", "user",
-                                "content", mensagem
-                        )
-                }
-        );
-
-        Map resposta = restClient.post()
-                .uri("/chat/completions")
-                .body(body)
-                .retrieve()
-                .body(Map.class);
-
-        var choices = (java.util.List<Map>) resposta.get("choices");
-
-        if (choices == null || choices.isEmpty()) {
-            throw new RuntimeException("O Grok não retornou uma resposta.");
-        }
-
-        Map message = (Map) choices.get(0).get("message");
-
-        return String.valueOf(message.get("content"));
     }
 }

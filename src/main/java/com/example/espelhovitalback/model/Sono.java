@@ -1,6 +1,9 @@
 package com.example.espelhovitalback.model;
 
+import jakarta.validation.constraints.*;
+
 import jakarta.persistence.*;
+
 import java.time.LocalDate;
 
 @Entity
@@ -9,23 +12,30 @@ public class Sono {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
     private Long id;
 
     @Column(name = "usuario_id")
     private Long usuarioId;
 
-    private Integer horas;
+    @NotNull
+    @Min(0)
+    @Max(24)
+    private Double horas;
 
+    @NotBlank
+    @Pattern(regexp = "Excelente|Boa|Regular|Ruim")
     private String qualidade;
 
     @Column(name = "data_registro")
     private LocalDate dataRegistro;
 
-    public Sono() {}
+    public Sono() {
+    }
 
     @PrePersist
     public void prePersist() {
-        this.dataRegistro = LocalDate.now();
+        if (this.dataRegistro == null) this.dataRegistro = LocalDate.now();
     }
 
     // GETTERS E SETTERS
@@ -42,11 +52,11 @@ public class Sono {
         this.usuarioId = usuarioId;
     }
 
-    public Integer getHoras() {
+    public Double getHoras() {
         return horas;
     }
 
-    public void setHoras(Integer horas) {
+    public void setHoras(Double horas) {
         this.horas = horas;
     }
 

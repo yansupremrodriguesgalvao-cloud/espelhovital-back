@@ -1,4 +1,5 @@
 package com.example.espelhovitalback.dto;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
