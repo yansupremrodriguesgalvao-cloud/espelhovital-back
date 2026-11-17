@@ -1,10 +1,6 @@
-FROM eclipse-temurin:17-jdk-alpine
+FROM eclipse-temurin:20-jdk-alpine
 WORKDIR /app
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw
-COPY .mvn .mvn
-RUN ./mvnw dependency:go-offline -B
-COPY src src
-RUN ./mvnw package -DskipTests
-EXPOSE 8081
+COPY . .
+RUN ./mvnw clean package -DskipTests
+EXPOSE 8080
 CMD ["java", "-jar", "target/espelhovital-back-0.0.1-SNAPSHOT.jar"]
