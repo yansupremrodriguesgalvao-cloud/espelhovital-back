@@ -4,6 +4,7 @@
 .codex
 target
 scripts
+docs/
 src/test
 *.log
 .env
