@@ -1,0 +1,10 @@
+.git
+.idea
+.agents
+.codex
+target
+scripts
+src/test
+*.log
+.env
+.env.*

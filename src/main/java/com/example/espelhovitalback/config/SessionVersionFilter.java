@@ -1,5 +1,6 @@
 package com.example.espelhovitalback.config;
 
+
 import com.example.espelhovitalback.repository.UsuarioRepository;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
@@ -22,29 +23,14 @@ public class SessionVersionFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
         var session = req.getSession(false);
         var auth = SecurityContextHolder.getContext().getAuthentication();
-
         if (session != null && auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
             var user = users.findById(Long.valueOf(auth.getName()));
-
-            if (user.isPresent()) {
-                Object sessionVersion = session.getAttribute("authVersion");
-
-                if (sessionVersion == null) {
-                    session.setAttribute("authVersion", user.get().getAuthVersion());
-                } else if (!Objects.equals(sessionVersion, user.get().getAuthVersion())) {
-                    session.invalidate();
-                    SecurityContextHolder.clearContext();
-                    res.setStatus(401);
-                    res.setContentType("application/json;charset=UTF-8");
-                    res.getWriter().write("{\"mensagem\":\"Sua sessão expirou. Entre novamente.\"}");
-                    return;
-                }
-            } else {
+            if (user.isEmpty() || !Objects.equals(session.getAttribute("authVersion"), user.get().getAuthVersion())) {
                 session.invalidate();
                 SecurityContextHolder.clearContext();
                 res.setStatus(401);
                 res.setContentType("application/json;charset=UTF-8");
-                res.getWriter().write("{\"mensagem\":\"Sua sessão expirou. Entre novamente.\"}");
+                res.getWriter().write("{\"mensagem\":\"Sua sessÃ£o expirou. Entre novamente.\"}");
                 return;
             }
         }

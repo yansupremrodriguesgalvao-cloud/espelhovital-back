@@ -1,5 +1,6 @@
 package com.example.espelhovitalback.config;
 
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -24,8 +25,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository repository) throws Exception {
-        http.csrf(csrf -> csrf.disable())
-                .cors(Customizer.withDefaults())
+        http.cors(Customizer.withDefaults())
                 .securityContext(c -> c.securityContextRepository(repository))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/api/csrf", "/api/login", "/usuarios/cadastrar", "/usuarios/face/login",
