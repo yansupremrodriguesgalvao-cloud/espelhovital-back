@@ -4,8 +4,10 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/csrf
-    # Preencha os dois campos no painel do Render ao criar o Blueprint.
     envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      # Preencha os dois campos abaixo no painel do Render.
       # Cole a senha atual do MySQL no Aiven em Environment no Render.
       - key: DB_PASSWORD
         sync: false
