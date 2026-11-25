@@ -1,57 +1,28 @@
-# Backend no Render
+# Publicar o backend no Render com MySQL do Aiven
 
-O backend usa Java 17, Maven e Docker. O frontend sera publicado separadamente na Vercel.
+1. Envie o projeto para o GitHub, incluindo o arquivo `render.yaml`.
+2. No Render, clique em **New → Blueprint**, conecte o repositório do backend e selecione a branch.
+3. Preencha os dois campos abaixo e clique em **Deploy Blueprint**.
+4. Quando o serviço estiver **Live**, abra a URL do backend com `/api/csrf` no final. Deve aparecer uma resposta JSON com o token.
 
-## Variaveis obrigatorias
-
-Configure no Render em Environment. Para executar localmente, configure as mesmas variaveis na configuracao de execucao do IntelliJ.
-
-| Nome | Valor |
+| Campo no Render | O que preencher |
 | --- | --- |
-| SPRING_PROFILES_ACTIVE | prod (ja definido na imagem Docker) |
-| DB_URL | URL JDBC do banco, incluindo porta, nome do banco e TLS |
-| DB_USERNAME | Usuario do banco |
-| DB_PASSWORD | Senha do banco |
-| APP_CORS_ORIGINS | Origem HTTPS exata do frontend, sem barra final |
-| APP_FRONTEND_URL | URL HTTPS do frontend, sem barra final |
+| `DB_PASSWORD` | Senha atual do usuário do MySQL. No Aiven, copie o campo **Password** em **Connection information**. |
+| `APP_FRONTEND_URL` | URL HTTPS do frontend publicado, sem barra final, por exemplo `https://seu-frontend.vercel.app`. Se o frontend ainda não estiver publicado, use `https://example.com` temporariamente e troque esse valor em **Environment** depois. |
 
-Exemplo de URL TiDB: `jdbc:mysql://SEU_HOST:4000/espelhovital?sslMode=VERIFY_IDENTITY`.
-As configuracoes anteriores do banco continuam comentadas em `src/main/resources/application.properties`, conforme solicitado. Comentarios tambem ficam visiveis para quem acessa o repositorio.
+O Blueprint já configura Docker, o plano Free e a verificação de saúde. O backend usa o banco `espelhovital` do Aiven informado para a turma, com usuário `avnadmin` e TLS obrigatório. O Flyway cria as tabelas automaticamente se o banco estiver vazio. Se já houver tabelas sem histórico do Flyway, use um banco vazio ou revise o schema antes de publicar.
 
-O Render fornece PORT automaticamente; o backend usa `server.port=${PORT:8081}` e escuta em `0.0.0.0`.
+Se o serviço já existe no Render, preencha os mesmos campos em **Environment** e publique a nova versão. Se já houver `DB_URL`, `DB_USERNAME` ou `APP_CORS_ORIGINS` antigos nesse serviço, remova-os para usar os padrões atuais.
 
-Opcionais: `AI_API_KEY` para IA; `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` e `MAIL_FROM` para envio de emails. Nao coloque esses valores em argumentos de build do Docker.
+### Se você tiver seu próprio banco no Aiven
 
-## Conferir o banco antes de publicar
+Em **Environment**, adicione `DB_USERNAME` com o valor de **User** e `DB_URL` montada com **Host**, **Port** e **Database name**. Atualize `DB_PASSWORD` com a senha desse banco.
 
-O perfil prod usa Hibernate validate e Flyway sem baseline automatico. Nao execute migracoes manualmente nem habilite baseline sem conferir o schema existente.
-
-No console SQL do provedor, confira:
-
-```sql
-SHOW TABLES;
+```text
+jdbc:mysql://HOST:PORTA/NOME_DO_BANCO?sslMode=REQUIRED
 ```
 
-Se existir `flyway_schema_history`, confira:
-
-```sql
-SELECT version, description, success
-FROM flyway_schema_history
-ORDER BY installed_rank;
-```
-
-O projeto contem migracoes V1 a V5. Banco vazio recebe as migracoes automaticamente. Banco existente sem historico precisa de revisao antes do primeiro deploy; o perfil prod recusara o baseline automatico. Confirme tambem que o provedor permite a conexao de rede do Render.
-
-## Publicar
-
-1. Envie Dockerfile, .dockerignore e as configuracoes para o repositorio do backend.
-2. No Render, crie um Web Service conectado ao repositorio e a branch desejada.
-3. Escolha Docker, com contexto na raiz e Dockerfile em `./Dockerfile`. Use o comando padrao da imagem.
-4. Cadastre as variaveis acima. Enquanto o frontend nao tiver URL definitiva, atualize as URLs quando ele for publicado.
-5. Configure Health Check Path como `/api/csrf`, endpoint publico existente que deve responder HTTP 200. Isso verifica o HTTP, sem substituir a verificacao de login e banco.
-6. Publique e confira os logs de inicializacao e migracoes.
-
-Depois de publicar: abra `https://SEU_BACKEND.onrender.com/api/csrf` e confirme a resposta JSON. Esse endpoint retorna um token e pode criar sessao.
+Guarde a senha em **Environment** no Render. Caso o Aiven retorne `Access denied`, confira se a senha atual pertence ao usuário do banco configurado.
 
 ## Etapa seguinte: frontend
 
@@ -69,4 +40,4 @@ docker build -t espelhovital-back .
 docker run --rm --env-file .env.render -e PORT=8081 -p 8081:8081 espelhovital-back
 ```
 
-Crie `.env.render` localmente com as variaveis necessarias, uma por linha, e nao versione esse arquivo. Para testar o perfil prod no navegador, use HTTPS; cookies Secure nao devem depender de HTTP local.
+Crie `.env.render` localmente com `DB_PASSWORD` e `APP_FRONTEND_URL`, uma por linha, e nao versione esse arquivo. Para testar o perfil prod no navegador, use HTTPS; cookies Secure nao devem depender de HTTP local.

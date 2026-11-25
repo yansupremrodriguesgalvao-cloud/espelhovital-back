@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: espelhovital-back
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/csrf
+    # Preencha os dois campos no painel do Render ao criar o Blueprint.
+    envVars:
+      # Cole a senha atual do MySQL no Aiven em Environment no Render.
+      - key: DB_PASSWORD
+        sync: false
+      # Cole a URL HTTPS do frontend publicado, sem barra no final.
+      # Para testar apenas o backend, use https://example.com temporariamente.
+      - key: APP_FRONTEND_URL
+        sync: false
